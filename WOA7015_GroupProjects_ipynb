@@ -1,0 +1,465 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "toc_visible": true,
+      "authorship_tag": "ABX9TyMaIE0cc+t/C4E+FSfMuMGJ",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/VinceChin/-/blob/master/WOA7015_GroupProjects_ipynb\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Processing the Data"
+      ],
+      "metadata": {
+        "id": "dra9KPC5cBFx"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Downlaod SSBD datasets and extracts"
+      ],
+      "metadata": {
+        "id": "fXleI8YFcFeP"
+      }
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "GlXn004UqSEQ"
+      },
+      "outputs": [],
+      "source": [
+        "import requests\n",
+        "import zipfile\n",
+        "import os\n",
+        "\n",
+        "def download_and_unzip(url, extract_to='.'):\n",
+        "    \"\"\"\n",
+        "    Downloads a ZIP file from a given URL and extracts its contents into a specified directory.\n",
+        "    Includes error handling for download and extraction processes.\n",
+        "\n",
+        "    Parameters:\n",
+        "    url (str): The URL of the ZIP file.\n",
+        "    extract_to (str): The directory to extract the contents to. Defaults to the current directory.\n",
+        "    \"\"\"\n",
+        "    # Create a directory for the dataset if it doesn't exist\n",
+        "    if not os.path.exists(extract_to):\n",
+        "        os.makedirs(extract_to)\n",
+        "\n",
+        "    try:\n",
+        "        # Attempt to download the file\n",
+        "        response = requests.get(url)\n",
+        "        response.raise_for_status()  # This will raise an HTTPError if the HTTP request returned an unsuccessful status code\n",
+        "\n",
+        "        zip_file_name = os.path.join(extract_to, 'temp.zip')\n",
+        "\n",
+        "        # Save the ZIP file\n",
+        "        with open(zip_file_name, 'wb') as file:\n",
+        "            file.write(response.content)\n",
+        "\n",
+        "        try:\n",
+        "            # Attempt to extract the ZIP file\n",
+        "            with zipfile.ZipFile(zip_file_name, 'r') as zip_ref:\n",
+        "                zip_ref.extractall(extract_to)\n",
+        "        except zipfile.BadZipFile:\n",
+        "            print(\"Failed to unzip the file. The file may be corrupted.\")\n",
+        "        finally:\n",
+        "            # Clean up: delete the ZIP file\n",
+        "            os.remove(zip_file_name)\n",
+        "\n",
+        "    except requests.exceptions.HTTPError as http_err:\n",
+        "        print(f\"HTTP error occurred: {http_err}\")\n",
+        "    except requests.exceptions.ConnectionError as conn_err:\n",
+        "        print(f\"Connection error occurred: {conn_err}\")\n",
+        "    except Exception as e:\n",
+        "        print(f\"An error occurred: {e}\")\n",
+        "\n",
+        "# Example usage\n",
+        "download_url = \"https://rolandgoecke.files.wordpress.com/2019/11/ssbd-release.zip\"\n",
+        "download_and_unzip(download_url, extract_to='ssbd')"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Download youtube videos and check donwload results"
+      ],
+      "metadata": {
+        "id": "0IR8K2F2cMgz"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "!pip install pytube"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "KGMLmuMJcb9U",
+        "outputId": "9119ab38-ad96-4fba-8d8b-37e626f41459"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Collecting pytube\n",
+            "  Downloading pytube-15.0.0-py3-none-any.whl (57 kB)\n",
+            "\u001b[2K     \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m57.6/57.6 kB\u001b[0m \u001b[31m734.0 kB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[?25hInstalling collected packages: pytube\n",
+            "Successfully installed pytube-15.0.0\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Parsing xmls from datasets"
+      ],
+      "metadata": {
+        "id": "vnMPlT3Rci8M"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import xml.etree.ElementTree as ET\n",
+        "import os\n",
+        "import pandas as pd\n",
+        "from pytube import YouTube\n",
+        "\n",
+        "def parse_xml(xml_file):\n",
+        "    tree = ET.parse(xml_file)\n",
+        "    root = tree.getroot()\n",
+        "\n",
+        "    video_data = {\n",
+        "        'xml_name': os.path.basename(xml_file),\n",
+        "        'url': root.find('url').text,\n",
+        "        'height': root.find('height').text,\n",
+        "        'width': root.find('width').text,\n",
+        "        'frames': root.find('frames').text,\n",
+        "        'persons': root.find('persons').text,\n",
+        "        'duration': root.find('duration').text,\n",
+        "        'conversation': root.find('conversation').text,\n",
+        "        'behaviours': []\n",
+        "    }\n",
+        "\n",
+        "    for behaviour in root.find('behaviours'):\n",
+        "        behaviour_data = {\n",
+        "            'time': behaviour.find('time').text,\n",
+        "            'bodypart': behaviour.find('bodypart').text,\n",
+        "            'category': behaviour.find('category').text,\n",
+        "            'intensity': behaviour.find('intensity').text,\n",
+        "            'modality': behaviour.find('modality').text\n",
+        "        }\n",
+        "        video_data['behaviours'].append(behaviour_data)\n",
+        "\n",
+        "    return video_data"
+      ],
+      "metadata": {
+        "id": "46Z7GPHjcq6V"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Download Videos"
+      ],
+      "metadata": {
+        "id": "lMguhrSUcywb"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def download_youtube_video(url, save_path, xml_name):\n",
+        "    try:\n",
+        "        yt = YouTube(url)\n",
+        "        stream = yt.streams.get_highest_resolution()\n",
+        "        # Use XML file name for the video, but keep the original video format\n",
+        "        video_format = stream.mime_type.split('/')[-1]\n",
+        "        video_filename = f\"{xml_name}.{video_format}\"\n",
+        "        stream.download(output_path=save_path, filename=video_filename)\n",
+        "        return True\n",
+        "    except Exception as e:\n",
+        "        print(f\"Failed to download {url}: {e}\")\n",
+        "        return False\n",
+        "\n",
+        "def process_xml_files(directory, video_directory):\n",
+        "    all_data = []\n",
+        "\n",
+        "    if not os.path.exists(video_directory):\n",
+        "        os.makedirs(video_directory)\n",
+        "\n",
+        "    for filename in os.listdir(directory):\n",
+        "        if filename.endswith('.xml'):\n",
+        "            xml_file = os.path.join(directory, filename)\n",
+        "            video_data = parse_xml(xml_file)\n",
+        "\n",
+        "            video_file_name = video_data['xml_name']  # XML file name without extension\n",
+        "            download_status = download_youtube_video(video_data['url'], video_directory, video_file_name)\n",
+        "            video_data['download_status'] = download_status\n",
+        "\n",
+        "            all_data.append(video_data)\n",
+        "\n",
+        "    return all_data\n",
+        "\n",
+        "# Example usage\n",
+        "annotations_directory = '/content/ssbd/Annotations'  # Your XML files directory\n",
+        "videos_directory = 'downloaded_videos'  # Directory to store downloaded videos\n",
+        "\n",
+        "all_video_data = process_xml_files(annotations_directory, videos_directory)\n",
+        "\n",
+        "# Convert list to pandas DataFrame\n",
+        "all_video_data_df = pd.DataFrame(all_video_data)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "cuxJQb2Xw6oT",
+        "outputId": "16f5b515-2a55-4758-a115-6ac00d253002"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Failed to download http://www.youtube.com/watch?v=5BVFjqo0FUY: 5BVFjqo0FUY is unavailable\n",
+            "Failed to download http://www.youtube.com/watch?v=T9rbit_oiJA: T9rbit_oiJA is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=ehlLfMossUY: ehlLfMossUY is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=Pqd9Vu-juPI: Pqd9Vu-juPI is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=zuoD4tEtYyk: zuoD4tEtYyk is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=xeKKMkVgNPU: xeKKMkVgNPU is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=5WTHMIJ_61I: 'streamingData'\n",
+            "Failed to download http://www.youtube.com/watch?v=-rC-ab0nzxY: -rC-ab0nzxY is unavailable\n",
+            "Failed to download http://www.youtube.com/watch?v=Pqd9Vu-juPI: Pqd9Vu-juPI is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=TH5mlAhdw00: TH5mlAhdw00 is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=5sgfS0SSh8o: 5sgfS0SSh8o is age restricted, and can't be accessed without logging in.\n",
+            "Failed to download http://www.youtube.com/watch?v=Pa-pdBF4FFA: Pa-pdBF4FFA is unavailable\n",
+            "Failed to download http://www.youtube.com/watch?v=wu5fgT-LkHs: wu5fgT-LkHs is unavailable\n",
+            "Failed to download http://www.youtube.com/watch?v=a5BuwkqtIa0: a5BuwkqtIa0 is age restricted, and can't be accessed without logging in.\n",
+            "Failed to download http://www.youtube.com/watch?v=vtVnrV_jog0: vtVnrV_jog0 is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=cxqsde-6V-c: cxqsde-6V-c is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=0Vk9itex_ds: 0Vk9itex_ds is age restricted, and can't be accessed without logging in.\n",
+            "Failed to download http://www.youtube.com/watch?v=WRGUUOZ5_wA: WRGUUOZ5_wA is a private video\n",
+            "Failed to download http://www.youtube.com/watch?v=WcsZ9eMQ5Zs: 'streamingData'\n",
+            "Failed to download http://www.youtube.com/watch?v=w96PxUcoo58: 'streamingData'\n",
+            "Failed to download http://www.youtube.com/watch?v=C_O8vyrSt0Q: C_O8vyrSt0Q is age restricted, and can't be accessed without logging in.\n",
+            "                xml_name  download_status\n",
+            "0      v_Spinning_13.xml            False\n",
+            "1      v_Spinning_18.xml             True\n",
+            "2      v_Spinning_15.xml             True\n",
+            "3   v_ArmFlapping_21.xml             True\n",
+            "4   v_ArmFlapping_02.xml             True\n",
+            "..                   ...              ...\n",
+            "70  v_ArmFlapping_19.xml             True\n",
+            "71  v_ArmFlapping_25.xml             True\n",
+            "72  v_ArmFlapping_08.xml             True\n",
+            "73  v_ArmFlapping_09.xml            False\n",
+            "74  v_HeadBanging_20.xml             True\n",
+            "\n",
+            "[75 rows x 2 columns]\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Display Download results"
+      ],
+      "metadata": {
+        "id": "w_2Gke2TYEVz"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import pandas as pd\n",
+        "\n",
+        "# Example function to determine the category from xml_name\n",
+        "def determine_category(xml_name):\n",
+        "  lower_name = xml_name.lower()\n",
+        "\n",
+        "  if 'armflapping' in lower_name:\n",
+        "    return 'armflapping'\n",
+        "  elif 'headbanging' in lower_name:\n",
+        "    return 'headbanging'\n",
+        "  elif 'spinning' in lower_name:\n",
+        "    return 'spinning'\n",
+        "  else:\n",
+        "    return 'unknown'\n",
+        "\n",
+        "# Assuming all_video_data_df is your DataFrame\n",
+        "# Add category column\n",
+        "all_video_data_df['category'] = all_video_data_df['xml_name'].apply(determine_category)\n",
+        "\n",
+        "# Prepare a list to hold the success rates for each category\n",
+        "category_success_rates = []\n",
+        "\n",
+        "# Calculate success rate for each category\n",
+        "for category in ['armflapping', 'headbanging', 'spinning']:\n",
+        "    category_data = all_video_data_df[all_video_data_df['category'] == category]\n",
+        "    success_count = category_data['download_status'].sum()\n",
+        "    total_count = category_data.shape[0]\n",
+        "    success_rate = (success_count / total_count) * 100 if total_count > 0 else 0\n",
+        "    category_success_rates.append({'Category': category, 'Success Rate': success_rate,\n",
+        "                                   'success_count': success_count, 'total_count': total_count})\n",
+        "\n",
+        "# Convert list to DataFrame\n",
+        "success_rate_df = pd.DataFrame(category_success_rates)\n",
+        "\n",
+        "# Display the DataFrame as a table\n",
+        "print(success_rate_df)\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "7TqTBHJvcPJu",
+        "outputId": "cf2bec06-8289-4c3f-d6b3-420fc78315f4"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "      Category  Success Rate  success_count  total_count\n",
+            "0  armflapping          72.0             18           25\n",
+            "1  headbanging          68.0             17           25\n",
+            "2     spinning          76.0             19           25\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Build & Train the model\n"
+      ],
+      "metadata": {
+        "id": "B_IXYMT5fQwv"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "!pip install mmaction"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 1000
+        },
+        "id": "Fl5-DC2GYBag",
+        "outputId": "22008adc-2cf4-4198-85fa-56f278b133f5"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Collecting mmaction\n",
+            "  Using cached mmaction-0.5.0-py2.py3-none-any.whl (106 kB)\n",
+            "Requirement already satisfied: matplotlib in /usr/local/lib/python3.10/dist-packages (from mmaction) (3.7.1)\n",
+            "Collecting mmcv (from mmaction)\n",
+            "  Using cached mmcv-2.1.0.tar.gz (471 kB)\n",
+            "  Preparing metadata (setup.py) ... \u001b[?25l\u001b[?25hdone\n",
+            "Requirement already satisfied: numpy in /usr/local/lib/python3.10/dist-packages (from mmaction) (1.23.5)\n",
+            "Requirement already satisfied: opencv-contrib-python in /usr/local/lib/python3.10/dist-packages (from mmaction) (4.8.0.76)\n",
+            "Collecting Pillow<=6.2.2 (from mmaction)\n",
+            "  Using cached Pillow-6.2.2-cp310-cp310-linux_x86_64.whl\n",
+            "Requirement already satisfied: contourpy>=1.0.1 in /usr/local/lib/python3.10/dist-packages (from matplotlib->mmaction) (1.2.0)\n",
+            "Requirement already satisfied: cycler>=0.10 in /usr/local/lib/python3.10/dist-packages (from matplotlib->mmaction) (0.12.1)\n",
+            "Requirement already satisfied: fonttools>=4.22.0 in /usr/local/lib/python3.10/dist-packages (from matplotlib->mmaction) (4.44.3)\n",
+            "Requirement already satisfied: kiwisolver>=1.0.1 in /usr/local/lib/python3.10/dist-packages (from matplotlib->mmaction) (1.4.5)\n",
+            "Requirement already satisfied: packaging>=20.0 in /usr/local/lib/python3.10/dist-packages (from matplotlib->mmaction) (23.2)\n",
+            "Requirement already satisfied: pyparsing>=2.3.1 in /usr/local/lib/python3.10/dist-packages (from matplotlib->mmaction) (3.1.1)\n",
+            "Requirement already satisfied: python-dateutil>=2.7 in /usr/local/lib/python3.10/dist-packages (from matplotlib->mmaction) (2.8.2)\n",
+            "Collecting addict (from mmcv->mmaction)\n",
+            "  Using cached addict-2.4.0-py3-none-any.whl (3.8 kB)\n",
+            "Collecting mmengine>=0.3.0 (from mmcv->mmaction)\n",
+            "  Using cached mmengine-0.10.1-py3-none-any.whl (450 kB)\n",
+            "Requirement already satisfied: pyyaml in /usr/local/lib/python3.10/dist-packages (from mmcv->mmaction) (6.0.1)\n",
+            "Collecting yapf (from mmcv->mmaction)\n",
+            "  Using cached yapf-0.40.2-py3-none-any.whl (254 kB)\n",
+            "Requirement already satisfied: rich in /usr/local/lib/python3.10/dist-packages (from mmengine>=0.3.0->mmcv->mmaction) (13.7.0)\n",
+            "Requirement already satisfied: termcolor in /usr/local/lib/python3.10/dist-packages (from mmengine>=0.3.0->mmcv->mmaction) (2.3.0)\n",
+            "Requirement already satisfied: opencv-python>=3 in /usr/local/lib/python3.10/dist-packages (from mmengine>=0.3.0->mmcv->mmaction) (4.8.0.76)\n",
+            "Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.10/dist-packages (from python-dateutil>=2.7->matplotlib->mmaction) (1.16.0)\n",
+            "Requirement already satisfied: importlib-metadata>=6.6.0 in /usr/local/lib/python3.10/dist-packages (from yapf->mmcv->mmaction) (6.8.0)\n",
+            "Requirement already satisfied: platformdirs>=3.5.1 in /usr/local/lib/python3.10/dist-packages (from yapf->mmcv->mmaction) (4.0.0)\n",
+            "Requirement already satisfied: tomli>=2.0.1 in /usr/local/lib/python3.10/dist-packages (from yapf->mmcv->mmaction) (2.0.1)\n",
+            "Requirement already satisfied: zipp>=0.5 in /usr/local/lib/python3.10/dist-packages (from importlib-metadata>=6.6.0->yapf->mmcv->mmaction) (3.17.0)\n",
+            "Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.10/dist-packages (from rich->mmengine>=0.3.0->mmcv->mmaction) (3.0.0)\n",
+            "Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /usr/local/lib/python3.10/dist-packages (from rich->mmengine>=0.3.0->mmcv->mmaction) (2.16.1)\n",
+            "Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.10/dist-packages (from markdown-it-py>=2.2.0->rich->mmengine>=0.3.0->mmcv->mmaction) (0.1.2)\n",
+            "Building wheels for collected packages: mmcv\n",
+            "  Building wheel for mmcv (setup.py) ... \u001b[?25l\u001b[?25hdone\n",
+            "  Created wheel for mmcv: filename=mmcv-2.1.0-cp310-cp310-linux_x86_64.whl size=27499312 sha256=947f40a8bc27cf299fd1575e0fc5fd501e27b02a73171b901cf5a1c2aa231028\n",
+            "  Stored in directory: /root/.cache/pip/wheels/8b/09/35/94a7f7ba6a00e3810abd0492340e4cbba0ff3d443120a94120\n",
+            "Successfully built mmcv\n",
+            "Installing collected packages: addict, Pillow, yapf, mmengine, mmcv, mmaction\n",
+            "  Attempting uninstall: Pillow\n",
+            "    Found existing installation: Pillow 9.4.0\n",
+            "    Uninstalling Pillow-9.4.0:\n",
+            "      Successfully uninstalled Pillow-9.4.0\n",
+            "\u001b[31mERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.\n",
+            "bokeh 3.3.1 requires pillow>=7.1.0, but you have pillow 6.2.2 which is incompatible.\n",
+            "dopamine-rl 4.0.6 requires Pillow>=7.0.0, but you have pillow 6.2.2 which is incompatible.\n",
+            "fastai 2.7.13 requires pillow>=9.0.0, but you have pillow 6.2.2 which is incompatible.\n",
+            "imageio 2.31.6 requires pillow<10.1.0,>=8.3.2, but you have pillow 6.2.2 which is incompatible.\u001b[0m\u001b[31m\n",
+            "\u001b[0mSuccessfully installed Pillow-6.2.2 addict-2.4.0 mmaction-0.5.0 mmcv-2.1.0 mmengine-0.10.1 yapf-0.40.2\n"
+          ]
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "application/vnd.colab-display-data+json": {
+              "pip_warning": {
+                "packages": [
+                  "PIL"
+                ]
+              }
+            }
+          },
+          "metadata": {}
+        }
+      ]
+    }
+  ]
+}
